@@ -12,6 +12,7 @@ from ..serialization import team_dict, board_dict, user_dict
 from ..teams.service import create_team as build_team, create_board as build_board
 from ..activity.service import record_event, commit_board
 from ..realtime.manager import manager
+from ..tasks.service import clear_ineligible_assignments
 
 router = APIRouter()
 
@@ -72,6 +73,9 @@ async def update_member(team_id: int, user_id: int, data: s.MemberUpdate, db: Se
         raise HTTPException(409, "Transfer ownership before changing the owner role")
     boards = lock_team_boards(db, team)
     member.role = data.role
+    db.flush()
+    for board in boards:
+        clear_ineligible_assignments(db, board, user, "team_role_changed")
     record_event(db, user, "member.role_changed", "user", user_id, team=team, details={"role": data.role})
     db.commit()
     await announce_membership(boards)

@@ -130,8 +130,8 @@ def upgrade():
 
 def backfill_ownership_and_columns():
     connection = op.get_bind()
-    teams, members, boards, tasks, columns, assignments = (table(name) for name in
-        ("teams", "team_members", "boards", "tasks", "board_columns", "task_members"))
+    teams, members, boards, tasks, columns, assignments, board_members = (table(name) for name in
+        ("teams", "team_members", "boards", "tasks", "board_columns", "task_members", "board_members"))
     for team in connection.execute(sa.select(teams)).mappings():
         owner = team["created_by_id"]
         connection.execute(sa.update(teams).where(teams.c.id == team["id"]).values(owner_id=owner))
@@ -160,8 +160,15 @@ def backfill_ownership_and_columns():
                 archived = bool(row["is_archived"])
                 assignees = connection.execute(sa.select(assignments.c.user_id).where(
                     assignments.c.task_id == row["id"]).order_by(assignments.c.user_id)).scalars().all()
-                permitted = connection.execute(sa.select(members.c.user_id).where(
-                    members.c.team_id == board["team_id"], members.c.user_id.in_(assignees))).scalars().all()
+                permitted_query = sa.select(members.c.user_id).where(
+                    members.c.team_id == board["team_id"], members.c.user_id.in_(assignees))
+                if not board["is_public"]:
+                    explicit_members = sa.select(board_members.c.user_id).where(
+                        board_members.c.board_id == board["id"])
+                    permitted_query = permitted_query.where(sa.or_(
+                        members.c.role.in_(("owner", "admin")),
+                        members.c.user_id.in_(explicit_members)))
+                permitted = connection.execute(permitted_query.order_by(members.c.user_id)).scalars().all()
                 connection.execute(sa.update(tasks).where(tasks.c.id == row["id"]).values(
                     column_id=column_id, position=0 if archived else active_index,
                     is_archived=archived, status=status,
@@ -181,11 +188,15 @@ def backfill_labels():
             links, tasks.c.id == links.c.task_id).where(links.c.label_id == label["id"])
             .distinct().order_by(tasks.c.board_id)).scalars().all() or all_boards[:1]
         for index, board_id in enumerate(board_ids):
-            name = label["name"] or f"Legacy label {label['id']}"
+            original_name = label["name"] or f"Legacy label {label['id']}"
+            name = original_name
             normalized = name.strip().casefold()
-            if (board_id, normalized) in used:
-                name = f"{name} [legacy {label['id']}]"
+            attempt = 1
+            while (board_id, normalized) in used:
+                suffix = str(label["id"]) if attempt == 1 else f"{label['id']}-{attempt}"
+                name = f"{original_name} [legacy {suffix}]"
                 normalized = name.strip().casefold()
+                attempt += 1
             used.add((board_id, normalized))
             if index == 0:
                 connection.execute(sa.update(labels).where(labels.c.id == label["id"]).values(

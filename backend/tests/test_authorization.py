@@ -91,6 +91,41 @@ def test_member_cannot_add_unrelated_board_account(client, users, board):
     assert response.status_code == 400
 
 
+@pytest.mark.parametrize("visibility", ["team", "private", "public-read"])
+def test_management_and_activity_role_matrix_with_explicit_read_only_cases(client, users, board, visibility):
+    owner_headers = users["owner"]["headers"]
+    changed = client.patch(f"/api/boards/{board['board_id']}", headers=owner_headers,
+                           json={"visibility": visibility})
+    assert changed.status_code == 200, changed.text
+    for actor in ("owner", "admin", "member", "outsider"):
+        headers = users[actor]["headers"]
+        manages = actor in ("owner", "admin")
+        reads = manages or (visibility == "team" and actor == "member") or visibility == "public-read"
+        team_update = client.patch(f"/api/teams/{board['team_id']}", headers=headers, json={"name": "Managed Team"})
+        assert team_update.status_code == (200 if manages else 403), (visibility, actor, "team-update")
+        board_update = client.patch(f"/api/boards/{board['board_id']}", headers=headers, json={"name": "Managed Board"})
+        assert board_update.status_code == (200 if manages else 403), (visibility, actor, "board-update")
+        created = client.post(f"/api/boards/{board['board_id']}/columns", headers=headers,
+                              json={"name": f"Role matrix {actor}"})
+        assert created.status_code == (201 if manages else 403), (visibility, actor, "column-create")
+        column_id = created.json()["id"] if manages else board["column_ids"][0]
+        updated = client.patch(f"/api/columns/{column_id}", headers=headers, json={"name": "Updated", "wip_limit": 2})
+        assert updated.status_code == (200 if manages else 403), (visibility, actor, "column-update-wip")
+        deleted = client.delete(f"/api/columns/{column_id}", headers=headers)
+        assert deleted.status_code == (200 if manages else 403), (visibility, actor, "column-delete")
+        activity = client.get(f"/api/boards/{board['board_id']}/activity", headers=headers)
+        assert activity.status_code == (200 if reads else 403), (visibility, actor, "activity-read")
+        edits_tasks = manages or (visibility == "team" and actor == "member")
+        task = client.post(f"/api/tasks/?board_id={board['board_id']}", headers=headers,
+                           json={"title": f"Matrix work {actor}", "column_id": board["column_ids"][0]})
+        assert task.status_code == (201 if edits_tasks else 403), (visibility, actor, "task-create")
+        if edits_tasks:
+            task_id = task.json()["id"]
+            patched = client.patch(f"/api/tasks/{task_id}", headers=headers, json={"title": "Authorized edit"})
+            assert patched.status_code == 200, (visibility, actor, "task-update")
+            assert client.delete(f"/api/tasks/{task_id}", headers=headers).status_code == 200
+
+
 @pytest.mark.parametrize("actor", ["admin", "member", "outsider"])
 def test_only_owner_can_delete_team(client, users, board, actor):
     response = client.delete(f"/api/teams/{board['team_id']}", headers=users[actor]["headers"])
@@ -169,3 +204,81 @@ def test_concurrent_case_variant_registration_creates_one_account(client, db):
         statuses = list(pool.map(register, (0, 1)))
     assert sorted(statuses) == [201, 409]
     assert db.scalar(sa.select(sa.func.count()).select_from(User).where(sa.func.lower(User.username) == "caseuser")) == 1
+
+
+@pytest.mark.parametrize("visibility", ["private", "public-read"])
+def test_visibility_change_clears_only_assignments_that_lose_edit_permission(client, users, board, db, visibility):
+    import sqlalchemy as sa
+    from app.models import Task, task_members
+
+    headers = users["owner"]["headers"]
+    member_id = users["member"]["user"]["id"]
+    admin_id = users["admin"]["user"]["id"]
+    created = []
+    for name, assignee_id in (("Active member work", member_id), ("Archived member work", member_id),
+                              ("Still eligible admin work", admin_id)):
+        result = client.post(f"/api/tasks/?board_id={board['board_id']}", headers=headers,
+                             json={"title": name, "column_id": board["column_ids"][0], "assignee_id": assignee_id})
+        assert result.status_code == 201, result.text
+        created.append(result.json())
+    archived = client.put(f"/api/tasks/{created[1]['id']}", headers=headers, json={"is_archived": True})
+    assert archived.status_code == 200, archived.text
+    created[1] = archived.json()
+    before = client.get(f"/api/boards/{board['board_id']}/state", headers=headers).json()["revision"]
+    db.rollback()
+    changed = client.patch(f"/api/boards/{board['board_id']}", headers=headers, json={"visibility": visibility})
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["revision"] == before + 1
+    db.expire_all()
+    for original in created[:2]:
+        task = db.get(Task, original["id"])
+        assert task.assignee_id is None
+        assert task.version == original["version"] + 1
+        assert task.assigned_to == []
+        assert db.scalar(sa.select(sa.func.count()).select_from(task_members).where(task_members.c.task_id == task.id)) == 0
+    preserved = db.get(Task, created[2]["id"])
+    assert preserved.assignee_id == admin_id
+    assert preserved.version == created[2]["version"]
+    state = client.get(f"/api/boards/{board['board_id']}/state", headers=users["member"]["headers"])
+    if visibility == "private":
+        assert state.status_code == 403
+    else:
+        assert state.status_code == 200
+        assert state.json()["permissions"]["can_edit"] is False
+
+
+def test_admin_demotion_reconciles_assignments_across_visibility_and_explicit_membership(client, users, board, db):
+    import sqlalchemy as sa
+    from app.models import Task, task_members
+
+    headers = users["owner"]["headers"]
+    admin_id = users["admin"]["user"]["id"]
+    scenarios = [(board["board_id"], board["column_ids"][0], "team", False)]
+    for visibility, explicit in (("private", False), ("public-read", False), ("private", True)):
+        created_board = client.post(f"/api/teams/{board['team_id']}/boards", headers=headers,
+                                    json={"name": f"Demotion {visibility} {explicit}", "visibility": visibility})
+        assert created_board.status_code == 201, created_board.text
+        board_id = created_board.json()["id"]
+        column_id = client.get(f"/api/boards/{board_id}/columns", headers=headers).json()[0]["id"]
+        if explicit:
+            member = client.post(f"/api/teams/{board['team_id']}/boards/{board_id}/members", headers=headers,
+                                 json={"user_id": admin_id, "role": "member"})
+            assert member.status_code == 201, member.text
+        scenarios.append((board_id, column_id, visibility, explicit))
+    tasks = []
+    for board_id, column_id, visibility, explicit in scenarios:
+        created = client.post(f"/api/tasks/?board_id={board_id}", headers=headers,
+                              json={"title": "Assignment survives only while eligible", "column_id": column_id,
+                                    "assignee_id": admin_id})
+        assert created.status_code == 201, created.text
+        tasks.append((created.json(), visibility == "team" or explicit))
+    db.rollback()
+    changed = client.patch(f"/api/teams/{board['team_id']}/members/{admin_id}", headers=headers, json={"role": "member"})
+    assert changed.status_code == 200, changed.text
+    db.expire_all()
+    for original, remains_eligible in tasks:
+        task = db.get(Task, original["id"])
+        assert task.assignee_id == (admin_id if remains_eligible else None)
+        assert task.version == original["version"] + (0 if remains_eligible else 1)
+        association_count = db.scalar(sa.select(sa.func.count()).select_from(task_members).where(task_members.c.task_id == task.id))
+        assert association_count == (1 if remains_eligible else 0)

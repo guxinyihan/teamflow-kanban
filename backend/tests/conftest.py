@@ -70,7 +70,7 @@ def database_engine(unmigrated_engine):
 def session_factory(database_engine, monkeypatch):
     from app import database
 
-    factory = sessionmaker(bind=database_engine, expire_on_commit=False)
+    factory = sessionmaker(bind=database_engine, autoflush=False, expire_on_commit=False)
     monkeypatch.setattr(database, "SessionLocal", factory)
     monkeypatch.setattr(database, "engine", database_engine)
     return factory

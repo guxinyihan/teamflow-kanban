@@ -158,3 +158,57 @@ def test_database_enforces_case_insensitive_user_identifier_uniqueness(database_
         connection.execute(sa.insert(users).values(**values[0]))
         with pytest.raises(sa.exc.IntegrityError), connection.begin_nested():
             connection.execute(sa.insert(users).values(**values[1]))
+
+
+def test_legacy_assignment_selection_respects_private_board_policy_and_preserves_old_links(unmigrated_engine):
+    with unmigrated_engine.connect() as connection:
+        command.upgrade(migration_config(connection), "0001_upstream")
+        seed_upstream(connection)
+        users = reflected(connection, "users")
+        members = reflected(connection, "team_members")
+        board_members = reflected(connection, "board_members")
+        assignments = reflected(connection, "task_members")
+        connection.execute(sa.delete(board_members).where(board_members.c.board_id == 1, board_members.c.user_id == 2))
+        for user_id, role in ((3, "admin"), (4, "member"), (5, None)):
+            connection.execute(sa.insert(users).values(
+                id=user_id, username=f"legacy{user_id}", email=f"legacy{user_id}@example.test", hashed_password="legacy-hash"))
+            if role:
+                connection.execute(sa.insert(members).values(team_id=1, user_id=user_id, role=role))
+        connection.execute(sa.insert(board_members).values(board_id=1, user_id=4, role="member"))
+        # User 2 lacks private-board access, user 3 is an inherited admin, user
+        # 4 is explicit, and user 5 is outside the team. Only eligible users may
+        # become the new single assignee; historical multi-assignee links stay.
+        for task_id, user_id in ((1, 3), (1, 4), (1, 5), (2, 2), (3, 2), (4, 2)):
+            connection.execute(sa.insert(assignments).values(task_id=task_id, user_id=user_id))
+        old_links = set(connection.execute(sa.select(assignments.c.task_id, assignments.c.user_id)).all())
+        connection.commit()
+        upgrade_legacy(connection)
+        tasks = reflected(connection, "tasks")
+        new_assignments = dict(connection.execute(sa.select(tasks.c.id, tasks.c.assignee_id)).all())
+        assert new_assignments == {1: 3, 2: None, 3: 2, 4: None}
+        retained = reflected(connection, "task_members")
+        assert set(connection.execute(sa.select(retained.c.task_id, retained.c.user_id)).all()) == old_links
+
+
+def test_legacy_duplicate_labels_survive_when_a_disambiguation_name_already_exists(unmigrated_engine):
+    with unmigrated_engine.connect() as connection:
+        command.upgrade(migration_config(connection), "0001_upstream")
+        seed_upstream(connection)
+        labels = reflected(connection, "labels")
+        links = reflected(connection, "task_labels")
+        connection.execute(sa.update(labels).where(labels.c.id == 1).values(name="A"))
+        connection.execute(sa.update(labels).where(labels.c.id == 2).values(name="A [legacy 3]"))
+        duplicate_id = connection.execute(sa.insert(labels).values(name="A", color="#abcdef").returning(labels.c.id)).scalar_one()
+        assert duplicate_id == 3
+        connection.execute(sa.insert(links), [{"task_id": 1, "label_id": 2}, {"task_id": 1, "label_id": 3}])
+        connection.commit()
+        upgrade_legacy(connection)
+        labels, links = reflected(connection, "labels"), reflected(connection, "task_labels")
+        rows = connection.execute(sa.select(labels).where(labels.c.board_id == 1)).mappings().all()
+        assert {row["id"] for row in rows} == {1, 2, 3}
+        assert len({row["normalized_name"] for row in rows}) == 3
+        assert all(row["name"].startswith("A") for row in rows)
+        assert connection.execute(sa.select(labels.c.color).where(labels.c.id == 3)).scalar_one() == "#abcdef"
+        retained = set(connection.execute(sa.select(links.c.task_id, links.c.label_id).where(links.c.task_id == 1)).all())
+        assert retained == {(1, 1), (1, 2), (1, 3)}
+        assert connection.execute(sa.select(sa.func.count()).select_from(links)).scalar_one() == 4

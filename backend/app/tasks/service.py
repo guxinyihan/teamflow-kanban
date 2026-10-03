@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 
 from .. import models
-from ..authorization.policy import require_board_edit, require_board_view
+from ..authorization.policy import board_permissions, require_board_edit, require_board_view
+from ..activity.service import record_event
 from ..domain import board_lock
 from .ordering import active_tasks, column_for_board, require_capacity, write_order
 
@@ -40,6 +41,29 @@ def assign(db, board, task, assignee_id):
         raise HTTPException(422, detail={"code": "invalid_assignee", "message": "Assignee must be allowed to work on this board"})
     task.assignee_id = user.id
     task.assigned_to = [user]
+
+
+def clear_ineligible_assignments(db, board, actor, reason):
+    """Keep assignments consistent with policy after a visibility/role change.
+
+    The caller holds the board lock and has flushed the changed policy. Clears,
+    versions and activity participate in the caller's single transaction.
+    """
+    tasks = db.query(models.Task).filter(
+        models.Task.board_id == board.id, models.Task.assignee_id.is_not(None)
+    ).all()
+    for task in tasks:
+        assignee = db.get(models.User, task.assignee_id)
+        if assignee and board_permissions(db, board, assignee)["can_edit"]:
+            continue
+        previous_id = task.assignee_id
+        task.assignee_id = None
+        task.assigned_to = []
+        task.version += 1
+        record_event(db, actor, "task_assigned", "task", task.id, board=board,
+                     details={"title": task.title, "assignee_id": None,
+                              "assignee_name": "Unassigned", "previous_assignee_id": previous_id,
+                              "reason": reason})
 
 
 def archive(db, board, task, archived):

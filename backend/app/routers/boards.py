@@ -11,6 +11,7 @@ from ..database import get_db
 from ..domain import board_lock
 from ..serialization import activity_dict, board_dict, column_dict, task_dict, user_dict
 from ..tasks.schemas import BoardUpdate, ColumnCreate, ColumnReorder, ColumnUpdate
+from ..tasks.service import clear_ineligible_assignments
 
 router = APIRouter()
 columns_router = APIRouter()
@@ -59,6 +60,9 @@ async def update_board(board_id: int, body: BoardUpdate, db: Session = Depends(g
     for key, value in changes.items():
         setattr(board, key, value)
     board.is_public = board.visibility == "public-read"
+    if "visibility" in changes:
+        db.flush()
+        clear_ineligible_assignments(db, board, user, "board_visibility_changed")
     await commit_board(db, board, user, "board_updated", "board", board.id, {"name": board.name})
     return board_dict(db, board, user)
 

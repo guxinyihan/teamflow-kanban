@@ -46,13 +46,26 @@ def test_guessed_task_id_never_grants_mutation(client, users, board, resource, m
 
 def test_atomic_move_normalizes_source_and_target(client, users, board):
     tasks = [create(client, users, board, str(index)) for index in range(4)]
+    destination = [create(client, users, board, f"Destination {index}", board["column_ids"][1]) for index in range(2)]
     headers = users["owner"]["headers"]
-    for target, index in [(board["column_ids"][0], 0), (board["column_ids"][0], 3), (board["column_ids"][1], 0)]:
+    source_id, destination_id = board["column_ids"][:2]
+    steps = [
+        (source_id, 0, [tasks[2], tasks[0], tasks[1], tasks[3]], destination),
+        (source_id, 3, [tasks[0], tasks[1], tasks[3], tasks[2]], destination),
+        (destination_id, 1, [tasks[0], tasks[1], tasks[3]], [destination[0], tasks[2], destination[1]]),
+    ]
+    expected_ids = {task["id"] for task in tasks + destination}
+    for target, index, expected_source, expected_destination in steps:
         snapshot = state(client, users, board)
         response = client.post(f"/api/tasks/{tasks[2]['id']}/move", json={"target_column_id": target, "target_index": index, "expected_revision": snapshot["revision"]}, headers=headers)
         assert response.status_code == 200, response.text
-        assert response.json()["revision"] > snapshot["revision"]
-        assert_order(state(client, users, board))
+        assert response.json()["revision"] == snapshot["revision"] + 1
+        after = state(client, users, board)
+        assert_order(after)
+        assert {task["id"] for task in after["tasks"]} == expected_ids
+        for column_id, expected in ((source_id, expected_source), (destination_id, expected_destination)):
+            rows = sorted((task for task in after["tasks"] if task["column_id"] == column_id), key=lambda task: task["position"])
+            assert [task["id"] for task in rows] == [task["id"] for task in expected]
 
 
 def test_positions_only_change_through_move(client, users, board):
@@ -96,6 +109,37 @@ def test_final_wip_slot_race_commits_one_move(client, users, board):
     assert rejected.status_code == 409
     assert rejected.json()["detail"]["code"] == "wip_limit"
     assert state(client, users, board)["revision"] == snapshot["revision"]
+
+
+def test_full_wip_column_allows_reorder_move_out_and_incoming_after_slot_is_freed(client, users, board):
+    headers = users["owner"]["headers"]
+    source_id, target_id = board["column_ids"][:2]
+    assert client.patch(f"/api/columns/{target_id}", headers=headers, json={"wip_limit": 2}).status_code == 200
+    first = create(client, users, board, "First in full column", target_id)
+    second = create(client, users, board, "Second in full column", target_id)
+    incoming = create(client, users, board, "Incoming work", source_id)
+
+    def move_task(task, target, index, expected_status=200):
+        before = state(client, users, board)
+        response = client.post(f"/api/tasks/{task['id']}/move", headers=headers,
+                               json={"target_column_id": target, "target_index": index,
+                                     "expected_revision": before["revision"]})
+        assert response.status_code == expected_status, response.text
+        after = state(client, users, board)
+        assert after["revision"] == before["revision"] + (expected_status == 200)
+        assert_order(after)
+        assert {row["id"] for row in after["tasks"]} == {first["id"], second["id"], incoming["id"]}
+        return after
+
+    reordered = move_task(second, target_id, 0)
+    assert [row["id"] for row in reordered["tasks"] if row["column_id"] == target_id] == [second["id"], first["id"]]
+    rejected = move_task(incoming, target_id, 2, 409)
+    assert next(column for column in rejected["columns"] if column["id"] == target_id)["active_count"] == 2
+    freed = move_task(first, source_id, 1)
+    assert next(column for column in freed["columns"] if column["id"] == target_id)["active_count"] == 1
+    accepted = move_task(incoming, target_id, 1)
+    assert [row["id"] for row in accepted["tasks"] if row["column_id"] == target_id] == [second["id"], incoming["id"]]
+    assert [row["id"] for row in accepted["tasks"] if row["column_id"] == source_id] == [first["id"]]
 
 
 def test_assignment_rejects_unrelated_user(client, users, board):
