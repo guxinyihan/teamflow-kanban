@@ -57,3 +57,19 @@ htmlcov/
 # Production build
 frontend/build/
 frontend/dist/ 
+
+# Private runtime data and disposable test artifacts
+uploads/
+private_uploads/
+*.sqlite
+*.db-wal
+*.db-shm
+.pytest_cache/
+.ruff_cache/
+.venv*/
+test-results/
+playwright-report/
+*.tsbuildinfo
+.env.*
+!.env.example
+!frontend/.env.example

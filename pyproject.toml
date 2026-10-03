@@ -1,0 +1,14 @@
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+addopts = "--tb=short"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+exclude = ["backend/alembic/legacy_versions"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/scripts/*.py" = ["E402"]

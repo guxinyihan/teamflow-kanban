@@ -1,40 +1,39 @@
-from datetime import datetime, timedelta
-from typing import Optional
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+from datetime import datetime, timedelta, timezone
+import secrets
+import bcrypt
+import jwt
+from pwdlib import PasswordHash
+from pwdlib.exceptions import UnknownHashError
 from ..config import settings
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# JWT settings
-SECRET_KEY = settings.SECRET_KEY
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+password_hash = PasswordHash.recommended()
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_MINUTES
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return password_hash.hash(password)
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-def verify_token(token: str) -> Optional[dict]:
+def verify_password(password: str, stored: str) -> bool:
     try:
-        print(f"Verifying token: {token[:10]}...")  # Log first 10 chars of token
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        print(f"Token payload: {payload}")
+        if stored.startswith(("$2a$", "$2b$", "$2y$")):
+            return bcrypt.checkpw(password.encode()[:72], stored.encode())
+        return password_hash.verify(password, stored)
+    except (ValueError, UnknownHashError):
+        return False
+
+def create_access_token(data: dict, expires_delta=None) -> str:
+    now = datetime.now(timezone.utc)
+    return jwt.encode({"sub": str(data["sub"]), "type": "access", "iss": "teamflow",
+                       "aud": "teamflow-api", "iat": now,
+                       "exp": now + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_MINUTES)),
+                       "jti": secrets.token_hex(16)}, settings.JWT_SECRET, algorithm="HS256")
+
+def verify_token(token: str):
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"],
+                             issuer="teamflow", audience="teamflow-api",
+                             options={"require": ["sub", "exp", "iat", "type", "jti"]})
+        if payload["type"] != "access" or not str(payload["sub"]).isdigit():
+            return None
         return payload
-    except JWTError as e:
-        print(f"Token verification failed: {str(e)}")
-        return None 
+    except jwt.InvalidTokenError:
+        return None

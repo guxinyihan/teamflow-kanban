@@ -1,0 +1,1 @@
+"""Private, validated attachment storage."""

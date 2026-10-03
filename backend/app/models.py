@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Table, Boolean, JSON
+from sqlalchemy import (Column, Integer, String, DateTime, ForeignKey, Table,
+                        Boolean, JSON, UniqueConstraint, CheckConstraint, Index, text)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -51,6 +52,8 @@ class Team(Base):
     description = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     created_by_id = Column(Integer, ForeignKey("users.id"))
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    membership_revision = Column(Integer, nullable=False, default=0, server_default="0")
     
     # Relationships
     team_memberships = relationship("TeamMember", back_populates="team", cascade="all, delete-orphan")
@@ -61,7 +64,7 @@ class Team(Base):
         viewonly=True,  # Make this view-only since we manage through team_memberships
         overlaps="team_memberships"
     )
-    boards = relationship("Board", back_populates="team")
+    boards = relationship("Board", back_populates="team", cascade="all, delete-orphan")
     created_by = relationship("User", foreign_keys=[created_by_id])
 
 class Board(Base):
@@ -74,6 +77,9 @@ class Board(Base):
     created_by_id = Column(Integer, ForeignKey("users.id"))
     team_id = Column(Integer, ForeignKey("teams.id"))
     is_public = Column(Boolean, default=False)  # If true, visible to all team members
+    visibility = Column(String, nullable=False, default="team", server_default="team")
+    revision = Column(Integer, nullable=False, default=0, server_default="0")
+    __table_args__ = (CheckConstraint("visibility IN ('private','team','public-read')", name="ck_board_visibility"),)
     
     # Relationships
     board_memberships = relationship("BoardMember", back_populates="board", cascade="all, delete-orphan")
@@ -85,7 +91,9 @@ class Board(Base):
         viewonly=True,  # Make this view-only since we manage through board_memberships
         overlaps="board_memberships"
     )
-    tasks = relationship("Task", back_populates="board")
+    tasks = relationship("Task", back_populates="board", cascade="all, delete-orphan")
+    columns = relationship("BoardColumn", cascade="all, delete-orphan", order_by="BoardColumn.position")
+    labels = relationship("Label", cascade="all, delete-orphan")
     created_by = relationship("User", foreign_keys=[created_by_id])
 
 class TaskStatus(str, enum.Enum):
@@ -107,9 +115,13 @@ class User(Base):
     hashed_password = Column(String)
     full_name = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (
+        Index("uq_user_username_ci", func.lower(username), unique=True),
+        Index("uq_user_email_ci", func.lower(email), unique=True),
+    )
     
     # Relationships
-    created_tasks = relationship("Task", back_populates="creator")
+    created_tasks = relationship("Task", back_populates="creator", foreign_keys="Task.creator_id")
     assigned_tasks = relationship("Task", secondary=task_members, back_populates="assigned_to")
     team_memberships = relationship("TeamMember", back_populates="user", cascade="all, delete-orphan")
     board_memberships = relationship("BoardMember", back_populates="user", cascade="all, delete-orphan")
@@ -134,6 +146,9 @@ class Label(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     color = Column(String)
+    board_id = Column(Integer, ForeignKey("boards.id"), nullable=False)
+    normalized_name = Column(String, nullable=False)
+    __table_args__ = (UniqueConstraint("board_id", "normalized_name", name="uq_label_board_name"),)
     
     # Relationships
     tasks = relationship("Task", secondary=task_labels, back_populates="labels")
@@ -154,9 +169,19 @@ class Task(Base):
     board_id = Column(Integer, ForeignKey("boards.id"))
     is_archived = Column(Boolean, default=False)
     checklist = Column(JSON, default=list)
+    column_id = Column(Integer, ForeignKey("board_columns.id"), nullable=False)
+    assignee_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    archived_at = Column(DateTime(timezone=True), nullable=True)
+    version = Column(Integer, nullable=False, default=1, server_default="1")
+    __table_args__ = (
+        CheckConstraint("position >= 0", name="ck_task_position_nonnegative"),
+        Index("uq_active_task_position", "board_id", "column_id", "position", unique=True,
+              sqlite_where=text("is_archived = 0"), postgresql_where=text("is_archived = false")),
+    )
     
     # Relationships
-    creator = relationship("User", back_populates="created_tasks")
+    creator = relationship("User", back_populates="created_tasks", foreign_keys=[creator_id])
+    assignee = relationship("User", foreign_keys=[assignee_id])
     board = relationship("Board", back_populates="tasks")
     assigned_to = relationship("User", secondary=task_members, back_populates="assigned_tasks")
     labels = relationship("Label", secondary=task_labels, back_populates="tasks")
@@ -191,7 +216,55 @@ class Attachment(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     task_id = Column(Integer, ForeignKey("tasks.id"))
     user_id = Column(Integer, ForeignKey("users.id"))
+    storage_name = Column(String, unique=True, nullable=True)
+    original_name = Column(String, nullable=True)
+    content_type = Column(String, nullable=True)
+    size = Column(Integer, nullable=True)
     
     # Relationships
     task = relationship("Task", back_populates="attachments")
-    user = relationship("User") 
+    user = relationship("User")
+
+
+class BoardColumn(Base):
+    __tablename__ = "board_columns"
+    id = Column(Integer, primary_key=True)
+    board_id = Column(Integer, ForeignKey("boards.id"), nullable=False)
+    name = Column(String, nullable=False)
+    position = Column(Integer, nullable=False)
+    wip_limit = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (
+        UniqueConstraint("board_id", "position", name="uq_column_position"),
+        CheckConstraint("position >= 0", name="ck_column_position_nonnegative"),
+        CheckConstraint("wip_limit IS NULL OR wip_limit > 0", name="ck_column_wip"),
+    )
+
+
+class Invitation(Base):
+    __tablename__ = "invitations"
+    id = Column(Integer, primary_key=True)
+    team_id = Column(Integer, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    email = Column(String, nullable=False)
+    role = Column(String, nullable=False)
+    token_hash = Column(String, unique=True, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    accepted_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (CheckConstraint("role IN ('admin','member')", name="ck_invitation_role"),)
+
+
+class ActivityEvent(Base):
+    __tablename__ = "activity_events"
+    id = Column(Integer, primary_key=True)
+    team_id = Column(Integer, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False, index=True)
+    board_id = Column(Integer, ForeignKey("boards.id", ondelete="CASCADE"), nullable=True, index=True)
+    actor_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    actor_name = Column(String, nullable=False)
+    entity_type = Column(String, nullable=False)
+    entity_id = Column(Integer, nullable=False)
+    action = Column(String, nullable=False)
+    details = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

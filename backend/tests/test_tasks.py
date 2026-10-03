@@ -1,5 +1,6 @@
 """Task domain regressions: authorization, atomic ordering, WIP and subresources."""
 from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
 import pytest
 
@@ -141,3 +142,142 @@ def test_board_columns_reorder_and_wip_reduction_conflict(client, users, board):
     assert [column["id"] for column in columns] == ids
     assert [column["position"] for column in columns] == list(range(len(ids)))
     assert client.delete(f"/api/boards/{board['board_id']}/columns/{column_id}", headers=headers).status_code == 409
+
+
+def test_noop_move_keeps_revision_and_failed_move_has_no_activity(client, users, board):
+    task = create(client, users, board)
+    headers = users["owner"]["headers"]
+    snapshot = state(client, users, board)
+    initial_activity = client.get(f"/api/boards/{board['board_id']}/activity", headers=headers).json()
+    body = {"target_column_id": task["column_id"], "target_index": 0, "expected_revision": snapshot["revision"]}
+    response = client.post(f"/api/tasks/{task['id']}/move", json=body, headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["revision"] == snapshot["revision"]
+    body["target_index"] = 100
+    assert client.post(f"/api/tasks/{task['id']}/move", json=body, headers=headers).status_code == 422
+    assert state(client, users, board)["revision"] == snapshot["revision"]
+    assert client.get(f"/api/boards/{board['board_id']}/activity", headers=headers).json() == initial_activity
+
+
+def test_archive_frees_wip_and_restore_obeys_limit(client, users, board):
+    headers = users["owner"]["headers"]
+    column_id = board["column_ids"][0]
+    assert client.patch(f"/api/columns/{column_id}", json={"wip_limit": 1}, headers=headers).status_code == 200
+    task = create(client, users, board)
+    assert client.put(f"/api/tasks/{task['id']}", json={"is_archived": True}, headers=headers).status_code == 200
+    create(client, users, board, "Replacement")
+    response = client.put(f"/api/tasks/{task['id']}", json={"is_archived": False}, headers=headers)
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "wip_limit"
+    snapshot = state(client, users, board)
+    assert next(row for row in snapshot["tasks"] if row["id"] == task["id"])["is_archived"] is True
+    assert_order(snapshot)
+
+
+def test_member_assignment_and_admin_comment_moderation(client, users, board):
+    task = create(client, users, board)
+    response = client.patch(f"/api/tasks/{task['id']}", json={"assignee_id": users["member"]["user"]["id"]}, headers=users["owner"]["headers"])
+    assert response.status_code == 200, response.text
+    assert response.json()["assignee_id"] == users["member"]["user"]["id"]
+    activity = client.get(f"/api/boards/{board['board_id']}/activity", headers=users["owner"]["headers"]).json()
+    assigned = next(event for event in activity if event["action"] == "task_assigned")
+    assert assigned["details"]["assignee_id"] == users["member"]["user"]["id"]
+    assert assigned["details"]["assignee_name"] == "Member"
+    comment = client.post(f"/api/tasks/{task['id']}/comments/", json={"content": "Please moderate"}, headers=users["member"]["headers"])
+    assert comment.status_code == 201, comment.text
+    assert client.delete(f"/api/tasks/{task['id']}/comments/{comment.json()['id']}", headers=users["admin"]["headers"]).status_code == 200
+
+
+def test_move_rejects_column_from_another_board(client, users, board):
+    task = create(client, users, board)
+    headers = users["owner"]["headers"]
+    response = client.post(f"/api/teams/{board['team_id']}/boards", json={"name": "Different Board", "team_id": board["team_id"], "visibility": "team"}, headers=headers)
+    assert response.status_code == 201, response.text
+    other_id = response.json()["id"]
+    other_column = client.get(f"/api/boards/{other_id}/columns", headers=headers).json()[0]["id"]
+    before = state(client, users, board)
+    response = client.post(f"/api/tasks/{task['id']}/move", json={"target_column_id": other_column, "target_index": 0, "expected_revision": before["revision"]}, headers=headers)
+    assert response.status_code == 422
+    assert state(client, users, board)["revision"] == before["revision"]
+
+
+def test_labels_do_not_share_rows_across_boards(client, users, board):
+    headers = users["owner"]["headers"]
+    first = create(client, users, board)
+    response = client.post(f"/api/teams/{board['team_id']}/boards", json={"name": "Another Board", "team_id": board["team_id"], "visibility": "team"}, headers=headers)
+    second_board = response.json()["id"]
+    second_column = client.get(f"/api/boards/{second_board}/columns", headers=headers).json()[0]["id"]
+    second = client.post(f"/api/tasks/?board_id={second_board}", json={"title": "Second", "column_id": second_column}, headers=headers).json()
+    labels = [client.post(f"/api/tasks/{task['id']}/labels/", json={"name": "Review", "color": "#112233"}, headers=headers).json() for task in (first, second)]
+    assert labels[0]["id"] != labels[1]["id"]
+    assert labels[0]["board_id"] != labels[1]["board_id"]
+    assert client.delete(f"/api/tasks/{first['id']}/labels/{labels[1]['id']}", headers=headers).status_code == 404
+
+
+@pytest.mark.parametrize("use_expected_revision", [True, False])
+def test_independent_database_sessions_serialize_final_wip_slot(client, users, board, session_factory, use_expected_revision):
+    """Separate thread connections prove database serialization across workers."""
+    from fastapi import HTTPException
+    from app.models import ActivityEvent, Task, User
+    from app.activity.service import record_event
+    from app.authorization.policy import require_board_edit
+    from app.domain import board_lock
+    from app.tasks.ordering import move
+
+    tasks = [create(client, users, board, str(index)) for index in range(2)]
+    headers = users["owner"]["headers"]
+    target = board["column_ids"][1]
+    assert client.patch(f"/api/columns/{target}", json={"wip_limit": 1}, headers=headers).status_code == 200
+    before = state(client, users, board)
+    barrier = Barrier(2)
+    with session_factory() as session:
+        initial_count = session.query(ActivityEvent).filter_by(board_id=board["board_id"]).count()
+
+    def worker(task_id):
+        with session_factory() as session:
+            actor = session.get(User, users["owner"]["user"]["id"])
+            task = session.get(Task, task_id)
+            require_board_edit(session, task.board_id, actor)
+            barrier.wait(timeout=10)
+            try:
+                locked = board_lock(session, task.board_id, before["revision"] if use_expected_revision else None)
+                require_board_edit(session, locked.id, actor)
+                task = session.get(Task, task_id)
+                move(session, locked, task, target, 0)
+                record_event(session, actor, "task_moved", "task", task.id, board=locked)
+                session.commit()
+                return 200
+            except HTTPException as error:
+                session.rollback()
+                return error.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        statuses = list(executor.map(worker, [task["id"] for task in tasks]))
+    assert sorted(statuses) == [200, 409]
+    after = state(client, users, board)
+    assert after["revision"] == before["revision"] + 1
+    assert sum(task["column_id"] == target and not task["is_archived"] for task in after["tasks"]) == 1
+    assert_order(after)
+    with session_factory() as session:
+        assert session.query(ActivityEvent).filter_by(board_id=board["board_id"]).count() == initial_count + 1
+
+
+def test_reorder_rejects_duplicate_column_ids_without_mutation(client, users, board):
+    before = state(client, users, board)
+    ids = [column["id"] for column in before["columns"]]
+    response = client.post(f"/api/boards/{board['board_id']}/columns/reorder", json={"column_ids": ids + [ids[0]], "expected_revision": before["revision"]}, headers=users["owner"]["headers"])
+    assert response.status_code == 422
+    after = state(client, users, board)
+    assert after["columns"] == before["columns"]
+    assert after["revision"] == before["revision"]
+
+
+@pytest.mark.parametrize("field", ["title", "priority", "is_archived"])
+def test_null_required_task_field_cannot_mutate_revision(client, users, board, field):
+    task = create(client, users, board)
+    before = state(client, users, board)
+    response = client.patch(f"/api/tasks/{task['id']}", json={field: None}, headers=users["owner"]["headers"])
+    assert response.status_code == 422
+    after = state(client, users, board)
+    assert after["revision"] == before["revision"]
+    assert after["tasks"] == before["tasks"]
