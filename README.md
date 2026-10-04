@@ -1,6 +1,10 @@
 # TeamFlow
 
+[![TeamFlow verification](https://github.com/guxinyihan/teamflow-kanban/actions/workflows/ci.yml/badge.svg)](https://github.com/guxinyihan/teamflow-kanban/actions/workflows/ci.yml)
+
 Collaborative Kanban with enforceable roles, atomic task ordering, WIP limits, private attachments, activity history and authenticated board WebSockets.
+
+[Public repository](https://github.com/guxinyihan/teamflow-kanban) · [Final report](FINAL_REPORT.md) · [Release status](RELEASE_STATUS.md)
 
 ## Overview
 
@@ -56,7 +60,7 @@ Additional captures: [tablet](docs/screenshots/tablet.png), [mobile task details
 | Real-time | Native browser WebSocket and FastAPI WebSocket endpoint |
 | Tests | pytest, FastAPI TestClient, Vitest, React Testing Library; local Playwright browser acceptance |
 
-Python 3.12 is locally verified; Python 3.13 is configured in CI. Node 24 is the frontend baseline. Exact backend versions are in `requirements-dev.lock`, and frontend versions are in `frontend/package-lock.json`. See [verification evidence](docs/VERIFICATION.md) and the [dependency audit record](docs/DEPENDENCIES.md).
+Python 3.12 is locally verified; Python 3.12 and 3.13 passed hosted SQLite CI. Node 24 is the frontend baseline. Exact backend versions are in `requirements-dev.lock`, and frontend versions are in `frontend/package-lock.json`. See [verification evidence](docs/VERIFICATION.md) and the [dependency audit record](docs/DEPENDENCIES.md).
 
 ## Architecture
 
@@ -259,7 +263,7 @@ Vitest/RTL cover permissions, WIP/stale move rollback, logout cache cleanup, inv
 
 [.github/workflows/ci.yml](.github/workflows/ci.yml) configures Python 3.12/3.13 SQLite checks, a real PostgreSQL 17 service running the backend suite, and Node 24 frontend tests/lint/build. Backend CI installs `requirements-dev.lock`; frontend CI uses `npm ci`. The workflow runs on pushes to `master`/`main` and pull requests with read-only repository permissions.
 
-Local passes do not establish a hosted Actions pass. Publication and hosted workflow results are recorded separately after execution.
+The first published implementation, `3a14fa8a33331cd99424acdfaa9d34d4c193492c`, passed all four actual hosted jobs in [run 37181772257](https://github.com/guxinyihan/teamflow-kanban/actions/runs/37181772257): 99 backend tests on each of SQLite/Python 3.12, SQLite/Python 3.13 and PostgreSQL 17, plus 26 frontend tests, lint and production build. Both SQLite jobs also passed fresh Alembic upgrade/check. The [publication evidence](docs/publication.json) records the inspected run, and [FINAL_REPORT.md](FINAL_REPORT.md) explains the release scope. Browser acceptance remains a separately verified local exercise.
 
 ## Accessibility
 
@@ -302,7 +306,7 @@ docs/                               audit, baseline, verification, screenshots
 - WIP and revision conflicts are rejected rather than automatically merging edits. Metadata editing uses authorized serialization; expected revisions are mandatory for task movement and optional for column reordering (the UI supplies them).
 - Activity pagination is available in the API; the current panel displays the recent page. Deleting a project removes its history.
 - Files receive bounded type checks, not malware scanning. File cleanup after a process crash may require the orphan maintenance command.
-- No Docker/deployment bundle or production hosting is claimed. Local browser acceptance and configured CI are distinguished from hosted execution.
+- No Docker/deployment bundle or production hosting is claimed. Browser acceptance was local; the four published GitHub Actions jobs passed separately.
 - Tailwind 4 targets modern browsers; only installed Chrome was exercised in the browser acceptance run. See [browser requirements](docs/DEPENDENCIES.md).
 - Known SQLite expression-index reflection and Starlette TestClient deprecation warnings are documented with independently tested behavior.
 

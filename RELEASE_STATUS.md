@@ -2,9 +2,9 @@
 
 Updated: 2026-10-04, Asia/Shanghai.
 
-**Local implementation, review and verification are complete. Publication is waiting for GitHub authentication.** No new public repository has been created, no project push has occurred, and hosted GitHub Actions have not run for TeamFlow.
+**Implementation, independent review, local verification and public repository publication are complete. All four actual hosted GitHub Actions jobs passed for the published implementation.**
 
-The original remote is retained as `upstream`; `origin` will point to the new repository after creation.
+The new public repository is [guxinyihan/teamflow-kanban](https://github.com/guxinyihan/teamflow-kanban). `origin` points there; the original remote is retained as `upstream`. [FINAL_REPORT.md](FINAL_REPORT.md) records all 42 requested release items.
 
 ## Verified local gates
 
@@ -21,22 +21,17 @@ The original remote is retained as `upstream`; `origin` will point to the new re
 | Real screenshots | Eight fake-data browser captures refreshed and inspected |
 | Independent review | Confirmed permission/assignment, legacy migration and delayed-session defects corrected; [review record](docs/RELEASE_REVIEW.md) |
 | Source hygiene | Whitespace check passed; no runtime databases/uploads, environment secrets, dependencies or generated builds tracked; local Markdown links resolve |
+| Public repository and actual hosted CI | New public repository created and full master pushed; [run 37181772257](https://github.com/guxinyihan/teamflow-kanban/actions/runs/37181772257) passed all four jobs |
 
 The browser exercise includes pointer/keyboard moves, two-session WebSocket synchronization, HTTP 409 WIP rejection and UI rollback, protected file download, outsider denial, real invitation acceptance, task subresources/activity and logout cleanup. The database suites additionally verify guessed IDs, owner invariants, concurrent ordering/final-slot contention, rollback without success events, token validation and populated legacy backfills.
 
-## Publication blocker
+## Confirmed publication
 
-`gh auth status` currently reports an invalid credential for the active GitHub account. A noninteractive check also found no usable native Git credential. The connected GitHub app can inspect the authenticated account, but its available tools do not create repositories or provide credentials to native Git.
+The authenticated account was verified as `guxinyihan`. The preferred name was unused, so a new public `teamflow-kanban` repository was created without overwriting an existing project. The repository has the requested description and ten topics. GitHub's master ref matched local implementation `3a14fa8a33331cd99424acdfaa9d34d4c193492c`; its LICENSE blob matched the original, and the upstream baseline remained an ancestor.
 
-Complete authentication in your own terminal:
+The actual push-triggered workflow completed successfully at `2026-10-04T06:07:28Z`. SQLite/Python 3.12, SQLite/Python 3.13 and PostgreSQL 17 each passed 99 backend tests. Both SQLite jobs passed fresh Alembic upgrade/check. The Node 24 job passed 26 frontend tests, lint and production build. No hosted CI fix was needed. [Publication evidence](docs/publication.json) records the inspected source snapshot and job URLs.
 
-```powershell
-gh auth login -h github.com
-```
-
-Use the account intended to own the public repository. Keep passwords, bearer tokens and authorization codes out of chat. After login, the remaining authorized work is to verify the active account, select a new unused repository name, create the public repository, push the preserved master history, inspect actual hosted Actions, correct any failures and create `FINAL_REPORT.md` with the confirmed repository URL and hosted results.
-
-The preferred repository name is `teamflow-kanban`; an existing repository will not be overwritten. A safe unused variant such as `teamflow-kanban-enhanced` will be selected when necessary.
+This publication record and final report follow the already successful implementation run. They identify that immutable validated source rather than assigning an unverified result to a future documentation commit. Public GitHub publication provides source hosting; it does not deploy the application.
 
 ## Implementation milestones
 
@@ -49,9 +44,10 @@ The preferred repository name is `teamflow-kanban`; an existing repository will 
 | `de6cd2e` | Assignment lifecycle reconciliation, legacy migration corrections and final backend regressions |
 | `01247f3` | Locked SQLite/PostgreSQL/frontend CI configuration |
 | `115c73c` | Responsive collaboration workflows, session reconciliation, patched frontend dependency snapshot and browser harness |
+| `3a14fa8` | Architecture, complete local release evidence and real screenshots |
 
-Documentation and screenshot evidence accompany these milestones in the following documentation commit. History was retained rather than replaced with a new initial commit.
+The release report and publication evidence accompany these milestones in the final documentation commit. History was retained rather than replaced with a new initial commit.
 
 ## Deployment limits
 
-The current WebSocket transport requires one application instance/worker. Sessions use access tokens with explicit re-login, and invitation delivery uses copyable links. Chrome browser acceptance is local-only; Python 3.13 is configured for hosted CI but has not been locally executed. SQLite expression-index reflection and Starlette TestClient warnings are documented. Full setup commands and the remaining product limitations are in [README.md](README.md).
+The current WebSocket transport requires one application instance/worker. Sessions use access tokens with explicit re-login, and invitation delivery uses copyable links. Chrome browser acceptance is local-only; Python 3.13 passed hosted CI and was not locally executed. SQLite expression-index reflection, Starlette TestClient and runner maintenance notices are documented. Full setup commands and the remaining product limitations are in [README.md](README.md).

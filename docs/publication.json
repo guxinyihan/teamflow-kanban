@@ -1,0 +1,102 @@
+{
+  "verified_date": "2026-10-04",
+  "repository": {
+    "full_name": "guxinyihan/teamflow-kanban",
+    "visibility": "public",
+    "url": "https://github.com/guxinyihan/teamflow-kanban"
+  },
+  "upstream": {
+    "url": "https://github.com/Akanichi/kanban-board",
+    "commit": "a41a00515b77e3ef61cfe4a7a0b3889c497e44b0",
+    "remains_ancestor": true,
+    "shallow_clone": false,
+    "license_blob": "57eef89ba33a2491a74512e789a076acd8ad57bf",
+    "license_matches": true,
+    "source_commits_ahead": 8,
+    "source_commits_behind": 0
+  },
+  "workflow": {
+    "name": "TeamFlow verification",
+    "run_id": 37181772257,
+    "run_number": 1,
+    "event": "push",
+    "source_commit": "3a14fa8a33331cd99424acdfaa9d34d4c193492c",
+    "url": "https://github.com/guxinyihan/teamflow-kanban/actions/runs/37181772257",
+    "status": "completed",
+    "conclusion": "success",
+    "created_at": "2026-10-04T06:05:16Z",
+    "updated_at": "2026-10-04T06:07:28Z"
+  },
+  "jobs": [
+    {
+      "name": "frontend",
+      "job_id": 111375616355,
+      "url": "https://github.com/guxinyihan/teamflow-kanban/actions/runs/37181772257/job/111375616355",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-04T06:05:54Z",
+      "completed_at": "2026-10-04T06:06:29Z",
+      "observed_results": {
+        "node": "24.21.0",
+        "test_files_passed": 4,
+        "tests_passed": 26,
+        "clean_install": "passed",
+        "lint": "passed",
+        "production_build": "passed"
+      }
+    },
+    {
+      "name": "backend-postgres",
+      "job_id": 111375616400,
+      "url": "https://github.com/guxinyihan/teamflow-kanban/actions/runs/37181772257/job/111375616400",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-04T06:05:18Z",
+      "completed_at": "2026-10-04T06:07:27Z",
+      "observed_results": {
+        "python": "3.12.14",
+        "postgresql": "17.11",
+        "tests_passed": 99,
+        "warnings": 1,
+        "pytest_seconds": 83.9
+      }
+    },
+    {
+      "name": "backend-sqlite (3.13)",
+      "job_id": 111375616420,
+      "url": "https://github.com/guxinyihan/teamflow-kanban/actions/runs/37181772257/job/111375616420",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-04T06:05:19Z",
+      "completed_at": "2026-10-04T06:06:35Z",
+      "observed_results": {
+        "python": "3.13.15",
+        "tests_passed": 99,
+        "warnings": 21,
+        "pytest_seconds": 54.14,
+        "fresh_alembic_upgrade_check": "passed"
+      }
+    },
+    {
+      "name": "backend-sqlite (3.12)",
+      "job_id": 111375616478,
+      "url": "https://github.com/guxinyihan/teamflow-kanban/actions/runs/37181772257/job/111375616478",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-04T06:05:19Z",
+      "completed_at": "2026-10-04T06:06:57Z",
+      "observed_results": {
+        "python": "3.12.14",
+        "tests_passed": 99,
+        "warnings": 21,
+        "pytest_seconds": 71.08,
+        "fresh_alembic_upgrade_check": "passed"
+      }
+    }
+  ],
+  "scope": "Actual hosted push run for the published implementation snapshot; release report and publication documentation follow this successful run. Browser acceptance and npm audit are separately recorded local checks.",
+  "runner_notices": [
+    "Existing action majors target deprecated Node 20; GitHub executed them on Node 24.",
+    "ubuntu-latest announced an upcoming runner image transition."
+  ]
+}

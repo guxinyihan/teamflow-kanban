@@ -1,6 +1,6 @@
-# Local verification evidence
+# Verification evidence
 
-Verified on **2026-10-04, Asia/Shanghai**, using isolated workspace runtimes and disposable databases. These results describe local execution. Hosted GitHub Actions must be inspected separately after publication.
+Verified on **2026-10-04, Asia/Shanghai**, using isolated workspace runtimes and disposable databases. The local results below are followed by separately inspected hosted GitHub Actions results.
 
 ## Backend release checks
 
@@ -59,7 +59,7 @@ Legacy verification used `python scripts/upgrade_legacy.py --database-url <copie
 
 ## Versions, warnings and CI limits
 
-**Python 3.12.15 was locally verified.** Python 3.13 is configured in the GitHub Actions SQLite matrix and is not claimed as locally verified. The frontend CI job is configured for Node 24; the local machine provides Node 24.18.0 and npm 11.16.0. Backend CI installs all 45 exact dependencies from `requirements-dev.lock`; the PostgreSQL job uses the PostgreSQL 17 service image.
+**Python 3.12.15 was locally verified.** Python 3.13 passed the hosted SQLite job recorded below; it was not locally executed. The frontend CI job uses Node 24; the local machine provides Node 24.18.0 and npm 11.16.0. Backend CI installs all 45 exact dependencies from `requirements-dev.lock`; the PostgreSQL job uses the PostgreSQL 17 service image.
 
 The SQLite run reported **21 known warnings**: Starlette deprecates the HTTPX-based TestClient adapter, and SQLAlchemy/Alembic cannot reflect SQLite expression indexes. The PostgreSQL run reported **one Starlette TestClient deprecation warning**. `--disable-warnings` hides warning details from the terminal but does not remove their count or turn them into verified absence. Case-insensitive index behavior is independently tested through actual database rejection of conflicting inserts on both engines; SQLite's ordinary Alembic metadata comparison does not cover those expression indexes.
 
@@ -83,4 +83,17 @@ Frontend regressions exercise role-aware controls, stale/WIP move rollback, exac
 
 The dependency audit is an observed registry result for the released lockfile, not a guarantee against future advisories. See [DEPENDENCIES.md](DEPENDENCIES.md), [MANUAL_ACCEPTANCE.md](MANUAL_ACCEPTANCE.md) and the sanitized [browser report](browser-acceptance.json). Raw local command outputs remain in the isolated workspace's `work/` directory and contain no published runtime database or application secret.
 
-Hosted CI results belong to the publication record. This page does not imply a hosted workflow pass or successful publication.
+## Hosted publication verification
+
+The new [public repository](https://github.com/guxinyihan/teamflow-kanban) received the preserved master history. [Push run 37181772257](https://github.com/guxinyihan/teamflow-kanban/actions/runs/37181772257) completed successfully at `2026-10-04T06:07:28Z` for implementation source `3a14fa8a33331cd99424acdfaa9d34d4c193492c`. The actual job states, steps and logs were inspected; no CI correction was required.
+
+| Actual hosted job | Runtime and result |
+| --- | --- |
+| `backend-sqlite (3.12)` | CPython 3.12.14; **99 passed**, 21 known warnings, 71.08 seconds; Ruff and fresh Alembic upgrade/check passed |
+| `backend-sqlite (3.13)` | CPython 3.13.15; **99 passed**, 21 known warnings, 54.14 seconds; Ruff and fresh Alembic upgrade/check passed |
+| `backend-postgres` | CPython 3.12.14 and actual PostgreSQL 17.11 service; **99 passed**, one known warning, 83.90 seconds |
+| `frontend` | Node 24.21.0; clean `npm ci`, lint, **26 tests**, TypeScript/Vite production build passed |
+
+These are hosted execution results, distinct from the local suite timings above. The sanitized [publication record](publication.json) contains the run, commit and job URLs. GitHub also confirmed the unchanged LICENSE blob and eight commits ahead of the upstream baseline, zero behind. The release report and documentation are added after this successful implementation run; the report identifies the validated implementation snapshot without claiming that it contains its own future commit.
+
+Runner annotations include the existing action majors' Node 20 deprecation (GitHub ran them on Node 24) and an upcoming `ubuntu-latest` image transition. All jobs succeeded despite these maintenance notices. Browser acceptance, npm advisory audit and local PostgreSQL fresh CLI checks are additional local evidence, rather than extra hosted jobs.
