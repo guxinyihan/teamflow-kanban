@@ -1,9 +1,5 @@
-import axios from 'axios';
+import { api } from './api';
 import { LoginData, RegisterData, LoginResponse, User } from '../types/auth';
-
-const api = axios.create({
-  baseURL: 'http://localhost:8000/api',
-});
 
 export const register = async (data: RegisterData): Promise<User> => {
   const response = await api.post('/auth/register', data, {
@@ -27,12 +23,3 @@ export const login = async (data: LoginData): Promise<LoginResponse> => {
   });
   return response.data;
 };
-
-// Add token to all requests if it exists
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-}); 

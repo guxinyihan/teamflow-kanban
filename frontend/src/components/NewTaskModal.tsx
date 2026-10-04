@@ -1,70 +1,89 @@
-import React, { useState } from 'react';
-import { TaskStatus } from '../types';
-
-interface NewTaskModalProps {
+import { useState, type FormEvent } from 'react';
+import { Modal } from './Modal';
+import type { User, TaskCreateInput } from '../types';
+import { errorMessage } from '../services/api';
+export function NewTaskModal({
+  onClose,
+  onSubmit,
+  columnId,
+  members,
+}: {
   onClose: () => void;
-  onSubmit: (title: string, description: string) => void;
-  status: TaskStatus;
-}
-
-export const NewTaskModal: React.FC<NewTaskModalProps> = ({ onClose, onSubmit, status }) => {
+  onSubmit: (input: TaskCreateInput) => Promise<void>;
+  columnId: number;
+  members: User[];
+}) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-    onSubmit(title.trim(), description.trim());
-    onClose();
-  };
-
+  const [assignee, setAssignee] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await onSubmit({
+        title: title.trim(),
+        description,
+        column_id: columnId,
+        assignee_id: assignee ? Number(assignee) : null,
+      });
+      onClose();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
-      <div className="bg-white rounded-lg p-6 w-full max-w-md">
-        <h2 className="text-xl font-semibold mb-4">Add New Task</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Title
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md"
-              placeholder="Enter task title"
-              autoFocus
-            />
-          </div>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md"
-              placeholder="Enter task description"
-              rows={3}
-            />
-          </div>
-          <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
-            >
-              Add Task
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Modal title="Add task" onClose={onClose}>
+      <form onSubmit={submit} className="stack">
+        <label htmlFor="new-title">
+          Title
+          <input
+            id="new-title"
+            autoFocus
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            maxLength={200}
+          />
+        </label>
+        <label htmlFor="new-description">
+          Description
+          <textarea
+            id="new-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={4}
+          />
+        </label>
+        <label htmlFor="new-assignee">
+          Assignee
+          <select id="new-assignee" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+            <option value="">Unassigned</option>
+            {members.map((member) => (
+              <option key={member.id} value={member.id}>
+                {member.full_name || member.username}
+              </option>
+            ))}
+          </select>
+        </label>
+        {error ? (
+          <p role="alert" className="error">
+            {error}
+          </p>
+        ) : null}
+        <div className="actions">
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="primary" disabled={busy || !title.trim()}>
+            {busy ? 'Creating…' : 'Create task'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
-}; 
+}

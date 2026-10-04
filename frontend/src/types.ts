@@ -1,181 +1,123 @@
-// Task Status and Priority Types
-export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'canceled';
 export type TaskPriority = 'high' | 'medium' | 'low';
-
-// User Interface
+export type Role = 'owner' | 'admin' | 'member';
+export type Visibility = 'private' | 'team' | 'public-read';
 export interface User {
   id: number;
-  email: string;
   username: string;
-  full_name?: string;
-  created_at: string;
+  full_name?: string | null;
+  email?: string;
 }
-
-// Label Interface
 export interface Label {
   id: number;
   name: string;
   color: string;
 }
-
-// Checklist Item Interface
 export interface ChecklistItem {
   id: number;
   content: string;
   is_completed: boolean;
 }
-
-// Comment Interface
 export interface Comment {
   id: number;
   content: string;
   created_at: string;
-  updated_at?: string;
-  task_id: number;
   user_id: number;
   user_name: string;
 }
-
-// Attachment Interface
 export interface Attachment {
   id: number;
   filename: string;
-  url: string;
   created_at: string;
-  task_id: number;
-  user_id?: number;
+  size?: number;
 }
-
-// Task Interface
 export interface Task {
   id: number;
+  board_id: number;
+  column_id: number;
   title: string;
   description?: string;
-  status: string;
-  priority: string;
-  position?: number;
-  due_date?: string;
-  created_at: string;
-  updated_at?: string;
-  creator_id?: number;
-  board_id: number;
+  priority: TaskPriority;
+  position: number;
+  version: number;
   is_archived: boolean;
-  creator?: User;
-  board: Board;
+  due_date?: string | null;
+  assignee_id?: number | null;
   assigned_to: User[];
   labels: Label[];
   comments: Comment[];
-  attachments: Attachment[];
   checklist: ChecklistItem[];
-  checklist_completion?: {
-    total: number;
-    completed: number;
-    percentage: number;
-  };
-  cover_image?: string;
-}
-
-// Column Interface
-export interface Column {
-  id: string;
-  title: string;
-  tasks: Task[];
-}
-
-// Activity Interface
-export interface Activity {
-  id: number;
-  action: string;
-  entity_type: 'task' | 'comment' | 'attachment';
-  entity_id: number;
-  user_id: number;
-  user_name: string;
+  attachments: Attachment[];
   created_at: string;
-  details?: Record<string, any>;
 }
-
+export interface Column {
+  id: number;
+  name: string;
+  position: number;
+  wip_limit: number | null;
+  active_count: number;
+}
 export interface TeamMember {
-  role: 'admin' | 'member';
+  role: Role;
   user: User;
 }
-
 export interface Team {
   id: number;
   name: string;
   description?: string;
-  created_at: string;
-  created_by_id: number;
-  created_by: User;
-  members: TeamMember[];
+  role: Role;
+  owner_id: number;
+  members?: TeamMember[];
 }
-
 export interface BoardMember {
-  role: 'admin' | 'member';
   user: User;
+  role: 'member' | 'admin';
 }
-
 export interface Board {
   id: number;
+  team_id: number;
   name: string;
   description?: string;
-  created_at: string;
-  created_by_id: number;
-  team_id: number;
-  is_public: boolean;
-  created_by: User;
-  team: Team;
-  members: BoardMember[];
+  visibility: Visibility;
+  revision: number;
+  can_edit: boolean;
+  can_admin: boolean;
+  members?: BoardMember[];
 }
-
+export interface BoardState {
+  board: Board;
+  columns: Column[];
+  tasks: Task[];
+  members: User[];
+  revision: number;
+  permissions: { can_edit: boolean; can_admin: boolean };
+}
+export interface Activity {
+  id: number;
+  actor_name: string;
+  action: string;
+  entity_type: string;
+  entity_id: number;
+  created_at: string;
+  details: Record<string, unknown>;
+}
+export interface Invitation {
+  id: number;
+  email: string;
+  role: 'member' | 'admin';
+  expires_at: string;
+  accepted_at?: string | null;
+  revoked_at?: string | null;
+  token?: string;
+  invitation_url?: string;
+}
 export interface TaskCreateInput {
   title: string;
   description?: string;
-  status?: string;
-  priority?: string;
-  position?: number;
-  due_date?: string;
-  checklist?: ChecklistItem[];
+  column_id: number;
+  priority?: TaskPriority;
+  due_date?: string | null;
+  assignee_id?: number | null;
 }
-
-export interface TaskUpdateInput {
-  title?: string;
-  description?: string;
-  status?: string;
-  priority?: string;
-  position?: number;
-  due_date?: string;
-  checklist?: ChecklistItem[];
+export type TaskUpdateInput = Partial<Omit<TaskCreateInput, 'column_id'>> & {
   is_archived?: boolean;
-}
-
-export interface LabelCreateInput {
-  name: string;
-  color: string;
-}
-
-export interface CommentCreateInput {
-  content: string;
-  task_id: number;
-}
-
-export interface TeamCreateInput {
-  name: string;
-  description?: string;
-}
-
-export interface BoardCreateInput {
-  name: string;
-  description?: string;
-  team_id: number;
-  is_public?: boolean;
-}
-
-export interface TeamMemberCreateInput {
-  user_id: number;
-  role?: 'admin' | 'member';
-}
-
-export interface BoardMemberCreateInput {
-  user_id: number;
-  role?: 'admin' | 'member';
-} 
+};

@@ -56,7 +56,7 @@ htmlcov/
 
 # Production build
 frontend/build/
-frontend/dist/ 
+frontend/dist/
 
 # Private runtime data and disposable test artifacts
 uploads/

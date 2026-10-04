@@ -1,104 +1,65 @@
-import React, { useState } from 'react';
 import { Droppable } from '@hello-pangea/dnd';
-import { Column as ColumnType, Task, TaskStatus } from '../types';
-import { TaskCard } from './TaskCard';
-import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
-import { NewTaskModal } from './NewTaskModal';
-import './Column.css';
-
-interface ColumnProps {
+import type { Column as ColumnType, Task } from '../types';
+import { TaskCard, type TaskCardProps } from './TaskCard';
+interface Props extends Omit<TaskCardProps, 'task' | 'index'> {
   column: ColumnType;
-  onDeleteTask: (id: number) => void;
-  onAddCard?: (title: string, description: string) => void;
-  onUpdateTask: (id: number, updates: Partial<Task>) => Promise<void>;
-  onAddComment: (taskId: number, content: string) => Promise<void>;
-  onAddAttachment: (taskId: number, file: File) => Promise<void>;
-  onAddLabel: (taskId: number, label: { name: string; color: string }) => Promise<void>;
-  onToggleChecklistItem: (taskId: number, itemId: number) => Promise<void>;
-  onAddChecklistItem: (taskId: number, content: string) => Promise<void>;
-  onDeleteComment: (taskId: number, commentId: number) => Promise<void>;
-  onRemoveList?: (columnId: string) => void;
+  tasks: Task[];
+  canAdmin: boolean;
+  onAdd: (column: number) => void;
+  onSettings: (column: number) => void;
 }
-
-const Column: React.FC<ColumnProps> = ({ 
-  column, 
-  onDeleteTask, 
-  onAddCard, 
-  onUpdateTask,
-  onAddComment,
-  onAddAttachment,
-  onAddLabel,
-  onToggleChecklistItem,
-  onAddChecklistItem,
-  onDeleteComment,
-  onRemoveList
-}) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-
+export default function Column({
+  column,
+  tasks,
+  canAdmin,
+  onAdd,
+  onSettings,
+  ...cardProps
+}: Props) {
+  const full = column.wip_limit !== null && column.active_count >= column.wip_limit;
   return (
-    <div className="column">
+    <section className={`column ${full ? 'column-full' : ''}`} aria-label={`${column.name} column`}>
       <div className="column-header">
-        <h2>{column.title}</h2>
-        {onRemoveList && column.id !== 'todo' && column.id !== 'in_progress' && column.id !== 'done' && (
+        <h2>{column.name}</h2>
+        <span
+          className="column-count"
+          aria-label={`${column.active_count} active tasks${column.wip_limit ? `, WIP limit ${column.wip_limit}` : ''}`}
+        >
+          {column.active_count}
+          {column.wip_limit !== null ? ` / ${column.wip_limit}` : ''}
+        </span>
+        {canAdmin ? (
           <button
-            onClick={() => onRemoveList(column.id)}
-            className="text-white hover:text-gray-200 transition-colors"
+            className="icon-button"
+            aria-label={`Settings for ${column.name}`}
+            onClick={() => onSettings(column.id)}
           >
-            <XMarkIcon className="h-5 w-5" />
+            ⋯
           </button>
-        )}
+        ) : null}
       </div>
-      <Droppable droppableId={column.id}>
+      {full ? <p className="wip-note">WIP limit reached</p> : null}
+      <Droppable
+        droppableId={String(column.id)}
+        isDropDisabled={!cardProps.canEdit || cardProps.moving || cardProps.dragDisabled}
+      >
         {(provided) => (
-          <div
-            ref={provided.innerRef}
-            {...provided.droppableProps}
-            className="column-content"
-          >
-            {column.tasks
-              .sort((a, b) => (a.position || 0) - (b.position || 0))
-              .map((task: Task, index: number) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                index={index}
-                onDelete={onDeleteTask}
-                onUpdate={onUpdateTask}
-                onAddComment={onAddComment}
-                onAddAttachment={onAddAttachment}
-                onAddLabel={onAddLabel}
-                onToggleChecklistItem={onToggleChecklistItem}
-                onAddChecklistItem={onAddChecklistItem}
-                onDeleteComment={onDeleteComment}
-              />
-            ))}
+          <div ref={provided.innerRef} {...provided.droppableProps} className="column-content">
+            {[...tasks]
+              .sort((a, b) => a.position - b.position)
+              .map((task, index) => (
+                <TaskCard key={task.id} task={task} index={index} {...cardProps} />
+              ))}
             {provided.placeholder}
+            {tasks.length === 0 ? <p className="column-empty">No tasks here yet</p> : null}
           </div>
         )}
       </Droppable>
-      {onAddCard && (
-        <>
-          <button 
-            className="add-card-button"
-            onClick={() => setIsModalOpen(true)}
-          >
-            <PlusIcon className="h-4 w-4 mr-2" />
-            <span>Add a card</span>
-          </button>
-          {isModalOpen && (
-            <NewTaskModal
-              onClose={() => setIsModalOpen(false)}
-              onSubmit={(title: string, description: string) => {
-                onAddCard(title, description);
-                setIsModalOpen(false);
-              }}
-              status={column.id as TaskStatus}
-            />
-          )}
-        </>
-      )}
-    </div>
+      {cardProps.canEdit ? (
+        <button className="add-card-button" onClick={() => onAdd(column.id)}>
+          + Add task
+        </button>
+      ) : null}
+    </section>
   );
-};
-
-export default Column; 
+}
