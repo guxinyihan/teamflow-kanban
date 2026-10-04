@@ -1,6 +1,6 @@
 # TeamFlow final report
 
-Release date: 2026-10-04, Asia/Shanghai. Verified implementation source: `3a14fa8a33331cd99424acdfaa9d34d4c193492c`. Local verification, independent review, public repository creation, preserved-history push and the actual hosted implementation workflow are complete. All four hosted jobs passed. This report records that inspected source run; its release-documentation commit is checked separately after publication.
+Release date: 2026-10-04, Asia/Shanghai. Verified implementation source: `09b99551ea2545298a2ce5d279b7bd7c401a6d99`. Local verification, independent review, public repository creation, preserved-history push and the corrected implementation's actual hosted workflow are complete. All four hosted jobs passed after a WebSocket finalization defect was reproduced and fixed. This report identifies that immutable source run; its release-documentation commit is checked separately after publication.
 
 ## 1. Upstream repository
 
@@ -16,7 +16,7 @@ MIT remains unchanged, including `Copyright (c) 2024 Mohamed Akaarir`. Both the 
 
 ## 4. Git history preservation
 
-The repository is not shallow. The upstream commit is an ancestor of the release source. At implementation source `3a14fa8`, master contains 20 reachable commits: 12 inherited commits and eight TeamFlow milestones. No history replacement or force push was used. The original remote remains `upstream`; the new public repository is `origin`.
+The repository is not shallow. The upstream commit is an ancestor of the release source. At implementation source `09b9955`, master contains 22 reachable commits: 12 inherited commits and ten TeamFlow milestones. No history replacement or force push was used. The original remote remains `upstream`; the new public repository is `origin`.
 
 ## 5. Upstream README claims audit
 
@@ -104,6 +104,8 @@ Allowlisted PDF, UTF-8 text, PNG and JPEG files receive extension/content valida
 
 The first JSON frame must supply an access token within five seconds. Tokens are not placed in query URLs. Origin allowlisting, token expiry and current board-view policy apply at connection, before delivery and during the connection loop. Access revocation disconnects protected channels; heartbeat frames do not trigger frontend data polling.
 
+Finalization cancels and drains receiver/delivery tasks inside a narrow AnyIO shield so session cancellation cannot interrupt cleanup. A deterministic regression failed before the fix and passed afterward; cancellation is not broadly caught or suppressed. This follows [AnyIO's finalization guidance](https://anyio.readthedocs.io/en/stable/cancellation.html#finalization). AnyIO is now an explicit runtime dependency; version 4.15.1 was already in the tested 45-package lock.
+
 ## 24. Board-channel isolation
 
 Subscriptions and bounded fanout queues are keyed by board ID. Notifications contain board/revision/entity/activity identifiers, with authorized REST snapshots supplying content. Database tests verify a client connected to another board receives none of the source board's events; guessed board access and revoked membership are rejected.
@@ -118,15 +120,15 @@ The active chain is `0001_upstream` followed by `0002_teamflow`. Historical upst
 
 ## 27. SQLite verification
 
-Complete suite: **99 passed**, exit 0, 96.52 seconds; fresh Alembic upgrade/check and copied real upstream CLI upgrade passed. The original upstream database stayed unchanged and an automatic backup was created. Tests use isolated files, production migration chain and production session options. SQLite enables foreign keys and a busy timeout. Its 21 known warnings concern TestClient deprecation and expression-index reflection; uniqueness is independently tested through database rejection.
+Complete current suite: **100 passed**, exit 0, 76.32 seconds (81.359 seconds process wall time), including the new shutdown regression. Earlier fresh Alembic upgrade/check and copied real upstream CLI upgrade passed; the corrected hosted SQLite jobs also pass fresh upgrade/check. The original upstream database stayed unchanged and an automatic backup was created. Tests use isolated files, production migration chain and production session options. SQLite enables foreign keys and a busy timeout. Its 21 known warnings concern TestClient deprecation and expression-index reflection; uniqueness is independently tested through database rejection.
 
 ## 28. PostgreSQL verification
 
-The same complete suite passed **99 tests**, exit 0, 134.87 seconds on actual PostgreSQL 17.11 at a loopback-only disposable cluster. Fresh Alembic upgrade/check passed. Tests use generated schemas, remove only those schemas afterward and share production session options. One known TestClient deprecation warning remains. The actual hosted PostgreSQL 17 service job also passed in the run linked in section 41.
+The same complete current suite passed **100 tests**, exit 0, 118.35 seconds (125.33 seconds process wall time) on actual PostgreSQL 17.11 at a loopback-only disposable cluster. Earlier fresh Alembic upgrade/check passed. Tests use generated schemas, remove only those schemas afterward and share production session options. One known TestClient deprecation warning remains. The corrected actual hosted PostgreSQL 17.11 service job also passed 100 tests in the run linked in section 41.
 
 ## 29. Backend tests
 
-Ruff passes. Backend coverage includes roles/foreign IDs, owner invariants, token validation, invitations, ordering/WIP races, assignment lifecycle, private files/import/cleanup, rollback activity/events, channel isolation/expiry/revocation and fresh/populated migrations. All 45 installed dependencies matched the exact development lock. Both final engine runs used the same source/test tree. See [VERIFICATION.md](docs/VERIFICATION.md) for commands, timings and warnings.
+Ruff and `pip check` pass. Backend coverage includes roles/foreign IDs, owner invariants, token validation, invitations, ordering/WIP races, assignment lifecycle, private files/import/cleanup, rollback activity/events, channel isolation/expiry/revocation, cancellation-safe WebSocket finalization and fresh/populated migrations. All 45 installed dependencies matched the exact development lock; declaring AnyIO directly added no installed package. Both final 100-test engine runs used the same source/test tree. See [VERIFICATION.md](docs/VERIFICATION.md) for commands, timings and warnings.
 
 ## 30. Frontend tests
 
@@ -134,7 +136,7 @@ Clean `npm ci`, lint and TypeScript/Vite production build pass. Vitest 4.1.11 ru
 
 ## 31. E2E status
 
-Local Playwright 1.63.0 with installed Chrome 154.0.8037.93 exercised a real API and disposable SQLite workspace: **12 checks passed**, zero page errors. Eight screenshots were refreshed and visually inspected after the frontend dependency/CSS changes. The run completed at `2026-10-04T03:46:39.825Z` (11:46:39 Asia/Shanghai). Browser E2E is not configured as a hosted Actions job. The sanitized report is [browser-acceptance.json](docs/browser-acceptance.json).
+Local Playwright 1.63.0 with installed Chrome 154.0.8037.93 reran against the corrected backend and a disposable SQLite workspace: **12 checks passed**, zero page errors, exit 0. It completed at `2026-10-04T06:38:58.595Z` (14:38:58 Asia/Shanghai); the sanitized current report is [browser-shutdown-acceptance.json](docs/browser-shutdown-acceptance.json). The eight published screenshots remain from the earlier visually inspected `2026-10-04T03:46:39.825Z` (11:46:39) run, recorded in [browser-acceptance.json](docs/browser-acceptance.json). The rerun's eight new captures stayed in the isolated workspace and are not published or claimed as visually inspected. Browser E2E is not a hosted Actions job.
 
 ## 32. Manual multi-user acceptance test
 
@@ -225,6 +227,7 @@ python scripts/cleanup_attachment_orphans.py
 From repository root in the activated development environment:
 
 ```powershell
+python -m pip check
 python -m ruff check backend
 python -m pytest -q --disable-warnings --tb=short
 $env:TEST_DATABASE_URL = 'postgresql+psycopg://USER:PASSWORD@127.0.0.1:5432/teamflow_test'
@@ -260,23 +263,27 @@ npm run test:e2e
 | `01247f3` | Locked SQLite/PostgreSQL/frontend CI |
 | `115c73c` | Responsive frontend workflows, session reconciliation, dependency remediation and browser harness |
 | `3a14fa8` | Architecture, release verification docs and real screenshots |
+| `b6e5b8e` | Initial public publication report and first successful hosted verification record |
+| `09b9955` | Cancellation-safe WebSocket finalization, deterministic regression and explicit existing AnyIO runtime dependency |
 
-No implementation correction was needed after the first hosted run. The final release-documentation commit adds this report and the confirmed publication record; its own workflow is inspected separately after pushing.
+The first hosted implementation run passed. The subsequent documentation run exposed intermittent Python 3.13 WebSocket teardown cancellation, which was reproduced deterministically and corrected in `09b9955`. Current local and hosted suites pass 100 tests. The final release-documentation commit refreshes this report and publication evidence; its own workflow is inspected separately after pushing.
 
 ## 41. GitHub Actions result
 
-**SUCCESS**, confirmed from actual hosted [run 37181772257](https://github.com/guxinyihan/teamflow-kanban/actions/runs/37181772257) for implementation source `3a14fa8a33331cd99424acdfaa9d34d4c193492c`. Each job completed successfully:
+**SUCCESS**, confirmed from actual hosted [run 37183466351](https://github.com/guxinyihan/teamflow-kanban/actions/runs/37183466351) for implementation source `09b99551ea2545298a2ce5d279b7bd7c401a6d99`, completed at `2026-10-04T06:42:52Z`. Each corrected-source job completed successfully:
 
 | Hosted job | Actual conclusion | Job ID |
 | --- | --- | --- |
-| Frontend, Node 24: clean install, lint, unit tests, production build | Success | `111375616355` |
-| Backend PostgreSQL 17 / Python 3.12 integration and migrations | Success | `111375616400` |
-| Backend SQLite / Python 3.13: lint, tests, fresh CLI migrations | Success | `111375616420` |
-| Backend SQLite / Python 3.12: lint, tests, fresh CLI migrations | Success | `111375616478` |
+| Frontend, Node 24: clean install, lint, unit tests, production build | Success | `111380509497` |
+| Backend PostgreSQL 17 / Python 3.12 integration and migrations | Success | `111380509331` |
+| Backend SQLite / Python 3.13: lint, tests, fresh CLI migrations | Success | `111380509461` |
+| Backend SQLite / Python 3.12: lint, tests, fresh CLI migrations | Success | `111380509395` |
 
 These are hosted results rather than an inference from local checks. The workflow uses read-only repository permissions, exact backend dependency locks and `npm ci`. Browser acceptance remains local; no hosted browser E2E result is claimed. The final report's documentation commit is verified separately after push, while this report retains the explicitly identified validated implementation source/run.
 
-Inspected hosted logs report **99 passed / 21 warnings / 71.08 seconds** on CPython 3.12.14 SQLite, **99 passed / 21 warnings / 54.14 seconds** on CPython 3.13.15 SQLite, and **99 passed / one warning / 83.90 seconds** on CPython 3.12.14 with actual PostgreSQL 17.11. Both SQLite jobs pass fresh Alembic upgrade/check. Frontend Node 24.21.0 reports **26 passed across four files**, lint and build success. Hosted action-runtime/image transition notices are maintenance warnings, not job failures.
+Inspected corrected-run logs report **100 passed / 21 warnings / 71.54 seconds** on CPython 3.12.14 SQLite, **100 passed / 21 warnings / 68.38 seconds** on CPython 3.13.15 SQLite, and **100 passed / one warning / 115.99 seconds** on CPython 3.12.14 with actual PostgreSQL 17.11. Both SQLite jobs pass Ruff and fresh Alembic upgrade/check. Frontend Node 24.21.0 reports **26 passed across four files**, lint and build success. Hosted action-runtime/image transition notices are maintenance warnings, not job failures.
+
+For chronology, [initial run 37181772257](https://github.com/guxinyihan/teamflow-kanban/actions/runs/37181772257) passed the then-current 99-test implementation at `3a14fa8`. [Documentation run 37182207962](https://github.com/guxinyihan/teamflow-kanban/actions/runs/37182207962) failed on Python 3.13 with 98 passed/one failed: the WebSocket test's body assertions completed, but context teardown raised `CancelledError`. The deterministic regression and narrow finalization shield fixed that lifecycle defect; the corrected run above passed all four jobs. [publication.json](docs/publication.json) preserves the current record and earlier runs.
 
 ## 42. Public repository URL
 

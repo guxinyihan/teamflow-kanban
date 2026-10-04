@@ -32,7 +32,7 @@ Inherited account registration/login, team/board/task models and CRUD, task card
 
 ## Screenshots
 
-Real browser captures using fake `example.test` accounts and a disposable workspace. See [browser acceptance](docs/MANUAL_ACCEPTANCE.md) for reproduction and limits.
+Real browser captures using fake `example.test` accounts and a disposable workspace, from the visually inspected 11:46 run on 2026-10-04 (Asia/Shanghai). A later 14:38 acceptance rerun passed all 12 checks against the corrected backend; its new captures stayed outside the release. See [browser acceptance](docs/MANUAL_ACCEPTANCE.md) for both records, reproduction and limits.
 
 | Board | Task details |
 | --- | --- |
@@ -263,7 +263,7 @@ Vitest/RTL cover permissions, WIP/stale move rollback, logout cache cleanup, inv
 
 [.github/workflows/ci.yml](.github/workflows/ci.yml) configures Python 3.12/3.13 SQLite checks, a real PostgreSQL 17 service running the backend suite, and Node 24 frontend tests/lint/build. Backend CI installs `requirements-dev.lock`; frontend CI uses `npm ci`. The workflow runs on pushes to `master`/`main` and pull requests with read-only repository permissions.
 
-The first published implementation, `3a14fa8a33331cd99424acdfaa9d34d4c193492c`, passed all four actual hosted jobs in [run 37181772257](https://github.com/guxinyihan/teamflow-kanban/actions/runs/37181772257): 99 backend tests on each of SQLite/Python 3.12, SQLite/Python 3.13 and PostgreSQL 17, plus 26 frontend tests, lint and production build. Both SQLite jobs also passed fresh Alembic upgrade/check. The [publication evidence](docs/publication.json) records the inspected run, and [FINAL_REPORT.md](FINAL_REPORT.md) explains the release scope. Browser acceptance remains a separately verified local exercise.
+The corrected implementation, `09b99551ea2545298a2ce5d279b7bd7c401a6d99`, passed all four actual hosted jobs in [run 37183466351](https://github.com/guxinyihan/teamflow-kanban/actions/runs/37183466351): **100 backend tests** on each of SQLite/Python 3.12, SQLite/Python 3.13 and PostgreSQL 17, plus **26 frontend tests**, lint and production build. Both SQLite jobs also passed Ruff and fresh Alembic upgrade/check. The first implementation run had passed 99 tests; a later documentation run exposed WebSocket teardown cancellation on Python 3.13. A deterministic regression and narrow finalization shield fixed it before the current successful run. The [publication evidence](docs/publication.json) retains this chronology, and [FINAL_REPORT.md](FINAL_REPORT.md) identifies the immutable verified source. Browser acceptance remains a separately verified local exercise.
 
 ## Accessibility
 

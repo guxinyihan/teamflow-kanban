@@ -1,8 +1,10 @@
 # Browser acceptance
 
-The release browser run passed on **2026-10-04 (Asia/Shanghai)** with installed Chrome and Playwright, a real FastAPI server, and a disposable SQLite database. Four independent browser contexts exercised an owner, a member, an unrelated outsider, and a newly registered invitee. The automated report is [browser-acceptance.json](browser-acceptance.json). These are local results; they do not assert a deployed service or a hosted CI run.
+The latest release browser run passed on **2026-10-04 (Asia/Shanghai)** against corrected backend source `09b99551ea2545298a2ce5d279b7bd7c401a6d99`, with installed Chrome and Playwright, a real FastAPI server and a disposable SQLite database. Four independent browser contexts exercised an owner, a member, an unrelated outsider and a newly registered invitee. The current automated report is [browser-shutdown-acceptance.json](browser-shutdown-acceptance.json). These are local results; they do not assert a deployed service or a hosted CI run.
 
-The final run used Chrome 154.0.8037.93 and Playwright 1.63.0 with the upgraded frontend lockfile. It completed at **11:46:39 on 2026-10-04 (Asia/Shanghai)**: 12 checks passed, zero page errors were recorded, and the eight screenshots below were refreshed and visually inspected.
+The latest run used Chrome 154.0.8037.93 and Playwright 1.63.0 with the unchanged released frontend. It completed at **14:38:58 on 2026-10-04 (Asia/Shanghai)** (`2026-10-04T06:38:58.595Z`): 12 checks passed, zero page errors and exit 0. Its eight new captures stayed in the isolated workspace and are not published or claimed as visually inspected.
+
+The eight published screenshots below remain from the earlier **11:46:39** run (`2026-10-04T03:46:39.825Z`), after the dependency/CSS update; that run passed 12 checks and its captures were visually inspected. Its original sanitized report remains [browser-acceptance.json](browser-acceptance.json).
 
 ## Reproduce the browser run
 
@@ -46,7 +48,7 @@ This browser run uses actual pointer dragging, keyboard dragging, and the access
 
 ## Screenshot evidence
 
-All screenshots are real browser captures of fake project data, taken during the recorded run. The invitation link is deliberately redacted with a neutral gray mask; no bearer token or live invitation secret is published.
+All published screenshots are real browser captures of fake project data from the earlier 11:46 run described above. The latest backend acceptance report does not replace or redate them. The invitation link is deliberately redacted with a neutral gray mask; no bearer token or live invitation secret is published.
 
 | Screenshot                                                               | Visible workflow                                                                            |
 | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
