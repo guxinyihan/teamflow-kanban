@@ -98,6 +98,56 @@ def test_failed_mutation_does_not_broadcast_success(client, users, board):
         assert_no_pending_frame(socket)
 
 
+def test_socket_shutdown_finishes_child_cleanup_during_scope_cancellation(users, board, monkeypatch):
+    import asyncio
+    from app.realtime import router as socket_module
+
+    children = []
+    frames = []
+    drained = []
+
+    class DisconnectingSocket:
+        headers = {}
+
+        async def accept(self):
+            pass
+
+        async def receive_json(self):
+            return {"token": users["owner"]["token"]}
+
+        async def send_json(self, frame):
+            frames.append(frame)
+
+        async def receive(self):
+            return {"type": "websocket.disconnect", "code": 1000}
+
+    async def exercise():
+        with anyio.CancelScope() as scope:
+            class CancelAtCleanup:
+                def __getattr__(self, name):
+                    return getattr(asyncio, name)
+
+                async def gather(self, *tasks, **options):
+                    children.extend(tasks)
+                    # Reproduce TestClient cancelling its session scope exactly
+                    # when the endpoint is draining its cancelled child tasks.
+                    scope.cancel()
+                    await asyncio.sleep(0)
+                    result = await asyncio.gather(*tasks, **options)
+                    drained.append(True)
+                    return result
+
+            with monkeypatch.context() as patch:
+                patch.setattr(socket_module, "asyncio", CancelAtCleanup())
+                await socket_module.board_socket(DisconnectingSocket(), board["board_id"])
+        assert frames[0]["type"] == "ready"
+        assert drained == [True]
+        assert len(children) == 2 and all(task.done() for task in children)
+        assert board["board_id"] not in socket_module.manager.channels
+
+    anyio.run(exercise)
+
+
 def test_membership_removal_closes_existing_board_socket(client, users, board):
     with client.websocket_connect(f"/api/boards/{board['board_id']}/ws") as socket:
         authorize(socket, users["member"], board["board_id"])

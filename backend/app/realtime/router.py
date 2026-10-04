@@ -1,5 +1,6 @@
 import asyncio
 import time
+import anyio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 from .. import database
 from ..models import User
@@ -72,4 +73,7 @@ async def board_socket(websocket: WebSocket, board_id: int):
                 task.cancel()
         pending = [task for task in (receiver, delivery) if task]
         if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
+            # Session/shutdown cancellation must not interrupt draining the
+            # child tasks or replace the parent scope's cancellation exception.
+            with anyio.CancelScope(shield=True):
+                await asyncio.gather(*pending, return_exceptions=True)
