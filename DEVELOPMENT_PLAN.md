@@ -41,7 +41,7 @@ Add owner/visibility/revision, persisted board columns, nullable WIP limit, task
 
 Expose one task move request with target column/index and required `expected_revision`; reject stale state with HTTP 409 and current revision. All board mutations serialize through a database compare-and-swap update of the board revision before reading/modifying task state. Recheck authorization after acquiring serialization. PostgreSQL row updates and SQLite transactional writer serialization protect the same board across workers; do not rely on process-local locks.
 
-Within the transaction, read sorted source/target cards, remove moved card, insert at a bounded index, enforce target WIP, temporarily park affected positions to avoid immediate unique collisions, then assign contiguous canonical positions. Commit all updates once. Task create/delete/archive/restore participate in the same serialization and WIP/order rules. Columns cannot be deleted while tasks reference them; users move/archive/delete tasks explicitly. WIP reduction below current count returns a conflict. No stale request may increment the durable revision or append success activity.
+Within the transaction, read sorted source/target cards, remove moved card, insert at a bounded index, enforce target WIP, temporarily park affected positions to avoid immediate unique collisions, then assign contiguous canonical positions. Commit all updates once. Task create/delete/archive/restore participate in the same serialization and WIP/order rules. Columns cannot be deleted while active or archived tasks reference them; users move or delete those tasks explicitly. WIP reduction below current count returns a conflict. No stale request may increment the durable revision or append success activity.
 
 ## Activity and real-time design
 
@@ -79,3 +79,7 @@ Use a project-local Python virtual environment, locked frontend dependencies, di
 7. After all gates pass, publish a new public repository under the authenticated account without overwriting an existing repository, retain `upstream`, inspect hosted CI and fix/reverify any failed jobs.
 
 Make logical local commits after validated milestones. Publication requires user-authorized scope already specified by this request, but success cannot be claimed before push and hosted CI evidence. Every release gate must report passed, failed or unverified; unfinished roadmap features must not appear as released capabilities.
+
+## Implementation decision recorded during development
+
+The final v1 WebSocket design authenticates using the access token in the first WebSocket message within five seconds, with an explicit origin allowlist, token expiration and repeated current-board eligibility checks. This replaces the proposed ticket workflow above while keeping credentials out of URLs/logs. Real-time fanout remains in-memory and single-worker; database concurrency protection is independent of that deployment limitation.

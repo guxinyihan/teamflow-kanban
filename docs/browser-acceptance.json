@@ -1,0 +1,69 @@
+{
+  "runner": "Playwright with installed Chrome, local disposable database",
+  "started_at": "2026-10-04T03:46:28.901Z",
+  "checks": [
+    {
+      "name": "Three distinct browser contexts authenticate independently",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Owner drags a task; member receives task.moved and sees the committed move without reload",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Keyboard Space/ArrowRight/Space moves a task through the drag-and-drop library",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Third incoming move is rejected with HTTP 409; UI rolls back and WIP remains exactly two",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Existing assignment, checklist, label, comments and authenticated private download render correctly",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Comment, checklist addition/toggle and label mutations persist through the actual UI/API",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Activity timeline shows real committed move/comment/checklist/label records",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Outsider cannot open the private board or download a guessed attachment ID",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Owner creates a real single-use invitation; matching registered guest accepts via UI",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Desktop, tablet and mobile board/dialog layouts stay usable with intentional board scrolling",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Logout clears the workspace and leaves no access token in browser storage",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "No uncaught browser JavaScript errors",
+      "result": "PASS",
+      "detail": ""
+    }
+  ],
+  "page_errors": [],
+  "completed_at": "2026-10-04T03:46:39.825Z",
+  "result": "PASS"
+}
